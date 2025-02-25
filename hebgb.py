@@ -5,6 +5,7 @@ from datetime import datetime
 from io import BytesIO
 
 import ddddocr
+import ffmpeg
 import requests
 from bs4 import BeautifulSoup
 from PIL import Image
@@ -74,7 +75,6 @@ def login(ua):
         print(f"获取验证码图片失败，状态码：{r_code.status_code}")
 
     if code != "":
-
         data = {
             "username": f"{uinfo[0]['uname']}",
             "passwd": f"{uinfo[0]['upass']}",
@@ -84,13 +84,14 @@ def login(ua):
         r_login = session.post(login_url, data=data)
         if "错误" in r_login.text:
             print(r_login.text)
-        millis = int(round(time.time() * 1000))
-        r = session.get(uinfo_url + str(millis))
-        uinfo_dict = r.json()
-        print("-----------------------------------------------")
-        print(
-            f"# 欢迎您，{uinfo_dict['realname']} 同志！\n# 您 {uinfo_dict['year']} 年度要求总学时为 {uinfo_dict['yqzxs']} 学时，已完成学时 {uinfo_dict['ywczxs']} 学时,\n# 要求必修总学时为 {uinfo_dict['yqbxxs']} 学时，已完成必修总学时 {uinfo_dict['ywcbxxs']} 学时"
-        )
+        else:
+            millis = int(round(time.time() * 1000))
+            r = session.get(uinfo_url + str(millis))
+            uinfo_dict = r.json()
+            print("-----------------------------------------------")
+            print(
+                f"# 欢迎您，{uinfo_dict['realname']} 同志！\n# 您 {uinfo_dict['year']} 年度要求总学时为 {uinfo_dict['yqzxs']} 学时，已完成学时 {uinfo_dict['ywczxs']} 学时,\n# 要求必修总学时为 {uinfo_dict['yqbxxs']} 学时，已完成必修总学时 {uinfo_dict['ywcbxxs']} 学时"
+            )
 
 
 def get_Courses():
@@ -176,14 +177,14 @@ def get_Courses():
     job(temp["courseid"], 16, temp["chapterid"], temp["duration"])
 
 
-def job(course_id, rate, chapter_id, duration):
-    """学习课程
+def get_course_duration(url):
+    """获取课程时长
 
     Args:
-        course_id (str): as it named
-        rate (int): playback rate
-        chapter_id (str): 与 HTTP POST Payload 中参数保持一致，在页面中显示参数名为 `courseId` :<
-        duration (str): 课程时长（持续时间）
+        html (str): 课程页面 HTML 内容
+
+    Returns:
+        int: 课程时长（秒）
     """
     headers = {
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
@@ -193,12 +194,111 @@ def job(course_id, rate, chapter_id, duration):
         "Content-Length": "0",
         "Host": "www.hebgb.gov.cn",
         "Origin": "https://www.hebgb.gov.cn",
-        "Referer": f"https://www.hebgb.gov.cn/portal/study_play.do?id={course_id}",
+        "Referer": f"{url}",
     }
+
+    # get page source
+    html = session.get(url, headers=headers)
+    # parse html
+    soup = BeautifulSoup(html.text, "html.parser")
+
+    # ignore errors
+    course_id = (
+        element := soup.find("input", {"type": "hidden", "id": "course_id"})
+    ).get("value", "")
+    is_gkk = (element := soup.find("input", {"type": "hidden", "id": "is_gkk"})).get(
+        "value", ""
+    )
+    payload = {"id": course_id, "is_gkk": is_gkk, "_": int(time.time() * 1000)}
+    session.headers.update(
+        {
+            "User-Agent": ua,
+            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6",
+            "X-Requested-With": "XMLHttpRequest",
+            "Host": "www.hebgb.gov.cn",
+            # accept
+            "Accept": "*/*",
+            # security
+            "Sec-Fetch-Dest": "empty",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Site": "same-origin",
+            # referer
+            "Referer": f"{url}",
+        }
+    )
+    response = session.get(
+        "https://www.hebgb.gov.cn/portal/getManifest.do",
+        params=payload,
+        headers=headers,
+    )
+    if response.status_code == 200:
+        res_course_no = response.json().get("course_no", "")
+        res_is_gkk = response.json().get("is_gkk", "")
+        # 至此，已经拿到 course_no
+        console.print(f"课程 coure_no: {res_course_no}")
+    else:
+        # 出错，则报错 15
+        exit(15)
+
+    payload = {
+        "path": "sco1",
+        "fileName": "1.mp4",
+        "course_no": f"{res_course_no}",
+        "is_gkk": f"{res_is_gkk}",
+        "_": int(time.time() * 1000),
+    }
+
+    # get video url
+    response = session.get(
+        "https://www.hebgb.gov.cn/portal/getUrlBypf.do",
+        params=payload,
+        headers=headers,
+    )
+
+    if response.status_code == 200:
+        video_url = response.text.strip()
+        ffmpeg_header_str = (
+            f"{url}\r\n",
+            f"{ua}\r\n",
+            f"Cookie: SESSION={session.cookies.get('SESSION')}\r\n"  # 动态获取会话cookie
+            "X-Requested-With: XMLHttpRequest\r\n"
+            "Accept: text/plain, */*; q=0.01\r\n"
+            "Accept-Language: zh-CN,zh;q=0.9",
+        )
+        video_info = ffmpeg.probe(video_url, **{"headers": ffmpeg_header_str})
+        try:
+            duration = float(video_info["format"]["duration"])  # 转为浮点型
+            # 如果需要整数秒可以加 int() 转换
+            return int(float(duration))  # 取整或保留小数
+        except KeyError:  # 防止format字段不存在
+            return 0
+        except ValueError:  # 防止转换失败
+            return 0
+    else:
+        return 0
+
+
+def job(course_id, rate, chapter_id, duration):
+    """学习课程
+
+    Args:
+        course_id (str): as it named
+        rate (int): playback rate
+        chapter_id (str): 与 HTTP POST Payload 中参数保持一致，在页面中显示参数名为 `courseId` :<
+        duration (str): 课程时长（持续时间）
+    """
+
     url = f"https://www.hebgb.gov.cn/portal/study_play.do?id={course_id}"
     url_learn = f"https://www.hebgb.gov.cn/portal/seekNew.do"
 
-    session.get(url, headers=headers)
+    # 获取课程时长
+    duration = get_course_duration(url)
+
+    if duration == 0:
+        console.print("无法获取视频时长信息，程序将退出!")
+        exit(11)
+    console.print(f"课程时长: {duration} 秒")
+
     study_secs = int(int(duration) * 60 / 30 / rate) + 1
     print("预计本节所需时长为", f"{study_secs}秒")
 
