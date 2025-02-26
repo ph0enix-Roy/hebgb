@@ -3,6 +3,7 @@ import re
 import time
 from datetime import datetime
 from io import BytesIO
+from enum import Enum
 
 import ddddocr
 import ffmpeg
@@ -18,6 +19,16 @@ ua = "Mozilla/5.0 (Windows; U; Windows NT 6.1; en-US) AppleWebKit/534.16 (KHTML,
 login_url = "https://www.hebgb.gov.cn/portal/login_ajax.do"
 code_url = "https://www.hebgb.gov.cn/portal/login_imgcode.do"
 uinfo_url = "https://www.hebgb.gov.cn/portal/checkIsLogin.do?_="
+
+
+class ErrorCodes(Enum):
+    SUCCESS = 0
+    LOGIN_FAILED = 11
+    CAPTCHA_FAILED = 12
+    COURSE_INFO_ERROR = 13
+    COURSE_DURATION_ERROR = 14
+    COURSE_GET_FAILED = 15
+    UNKNOWN_ERROR = 99
 
 
 def main():
@@ -82,8 +93,12 @@ def login(ua):
         }
 
         r_login = session.post(login_url, data=data)
-        if "错误" in r_login.text:
+        if "验证码错误" in r_login.text:
             print(r_login.text)
+            exit(ErrorCodes.CAPTCHA_FAILED)
+        elif "错误" in r_login.text:
+            print(r_login.text)
+            exit(ErrorCodes.LOGIN_FAILED)
         else:
             millis = int(round(time.time() * 1000))
             r = session.get(uinfo_url + str(millis))
@@ -167,7 +182,7 @@ def get_Courses():
             course_info["duration"],
         )
 
-    if len(course_info_list) == 0:
+    if course_info_list:
         print("暂无已报名课程!")
 
     console.print(table)
@@ -257,24 +272,22 @@ def get_course_duration(url):
 
     if response.status_code == 200:
         video_url = response.text.strip()
-        ffmpeg_header_str = (
-            f"{url}\r\n",
-            f"{ua}\r\n",
-            f"Cookie: SESSION={session.cookies.get('SESSION')}\r\n"  # 动态获取会话cookie
-            "X-Requested-With: XMLHttpRequest\r\n"
-            "Accept: text/plain, */*; q=0.01\r\n"
-            "Accept-Language: zh-CN,zh;q=0.9",
+
+        probe = ffmpeg.probe(video_url)
+        video_stream = next(
+            (stream for stream in probe["streams"] if stream["codec_type"] == "video"),
+            None,
         )
-        video_info = ffmpeg.probe(video_url, **{"headers": ffmpeg_header_str})
-        try:
-            duration = float(video_info["format"]["duration"])  # 转为浮点型
-            # 如果需要整数秒可以加 int() 转换
-            return int(float(duration))  # 取整或保留小数
-        except KeyError:  # 防止format字段不存在
+
+    try:
+        if video_stream:
+            duration = int(float(video_stream["duration"]))  # 单位秒
+            return duration
+        else:
             return 0
-        except ValueError:  # 防止转换失败
-            return 0
-    else:
+    except KeyError:  # 防止format字段不存在
+        return 0
+    except ValueError:  # 防止转换失败
         return 0
 
 
@@ -296,8 +309,7 @@ def job(course_id, rate, chapter_id, duration):
 
     if duration == 0:
         console.print("无法获取视频时长信息，程序将退出!")
-        exit(11)
-    console.print(f"课程时长: {duration} 秒")
+        exit(ErrorCodes.COURSE_DURATION_ERROR)
 
     study_secs = int(int(duration) * 60 / 30 / rate) + 1
     print("预计本节所需时长为", f"{study_secs}秒")
@@ -335,6 +347,3 @@ if __name__ == "__main__":
         main()
     except Exception as e:
         raise e
-        print("错误信息:", e)
-        print("请检查您输入的内容是否合法!")
-        time.sleep(3)
