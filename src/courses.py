@@ -111,8 +111,97 @@ class CourseProcessor:
 
     def _get_video_duration(self):
         # 封装视频时长获取逻辑
-        probe = ffmpeg.probe(self._get_video_url())
-        return self._parse_duration(probe)
+        url = f"https://www.hebgb.gov.cn/portal/study_play.do?id={self.course_id}"
+
+        headers = {
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
+            "Accept-Encoding": "gzip,deflate",
+            "Accept-Language": "zh-CN, zh;q=0.9",
+            "Connection": "keep-alive",
+            "Content-Length": "0",
+            "Host": "www.hebgb.gov.cn",
+            "Origin": "https://www.hebgb.gov.cn",
+            "Referer": f"{url}",
+        }
+
+        # get page source
+        html = self.session.get(url, headers=headers)
+        # parse html
+        soup = BeautifulSoup(html.text, "html.parser")
+
+        # ignore errors
+        course_id = (
+            element := soup.find("input", {"type": "hidden", "id": "course_id"})
+        ).get("value", "")
+        is_gkk = (
+            element := soup.find("input", {"type": "hidden", "id": "is_gkk"})
+        ).get("value", "")
+        payload = {"id": course_id, "is_gkk": is_gkk, "_": int(time.time() * 1000)}
+        self.session.headers.update(
+            {
+                "X-Requested-With": "XMLHttpRequest",
+                # accept
+                "Accept": "*/*",
+                # security
+                "Sec-Fetch-Dest": "empty",
+                "Sec-Fetch-Mode": "cors",
+                "Sec-Fetch-Site": "same-origin",
+                # referer
+                "Referer": f"{url}",
+            }
+        )
+        response = self.session.get(
+            "https://www.hebgb.gov.cn/portal/getManifest.do",
+            params=payload,
+            headers=headers,
+        )
+        if response.status_code == 200:
+            res_course_no = response.json().get("course_no", "")
+            res_is_gkk = response.json().get("is_gkk", "")
+            # 至此，已经拿到 course_no
+            self.console.print(f"课程 coure_no: {res_course_no}")
+        else:
+            # 出错，则报错 15
+            exit(15)
+
+        payload = {
+            "path": "sco1",
+            "fileName": "1.mp4",
+            "course_no": f"{res_course_no}",
+            "is_gkk": f"{res_is_gkk}",
+            "_": int(time.time() * 1000),
+        }
+
+        # get video url
+        response = self.session.get(
+            "https://www.hebgb.gov.cn/portal/getUrlBypf.do",
+            params=payload,
+            headers=headers,
+        )
+
+        if response.status_code == 200:
+            video_url = response.text.strip()
+
+            probe = ffmpeg.probe(video_url)
+            video_stream = next(
+                (
+                    stream
+                    for stream in probe["streams"]
+                    if stream["codec_type"] == "video"
+                ),
+                None,
+            )
+
+        try:
+            if video_stream:
+                duration = int(float(video_stream["duration"]))  # 单位秒
+                return duration
+            else:
+                return 0
+        except KeyError:  # 防止format字段不存在
+            return 0
+        except ValueError:  # 防止转换失败
+            return 0
 
     def _simulate_learning(self, duration):
         # 封装学习进度模拟
