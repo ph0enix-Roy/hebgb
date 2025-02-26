@@ -1,9 +1,11 @@
+# tests/test_course_manager.py
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# 将src目录添加到Python路径
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from tests.src.hebgb import CourseManager  # 现在应该可以正常导入了
+from courses import CourseManager
 from rich.table import Table
 from unittest.mock import Mock
 
