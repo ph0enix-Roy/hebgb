@@ -2,8 +2,8 @@
 name: 错误报告
 about: 提交报告以帮助我们改进
 title: ''
-labels: ''
-assignees: ''
+labels: bug
+assignees: ph0enix-Roy
 ---
 
 **描述错误**  
