@@ -1,6 +1,6 @@
 ---
 name: 功能请求
-about: 为本项目提出你的建议
+about: 为本项目提出您的建议
 title: ''
 labels: ''
 assignees: ''
