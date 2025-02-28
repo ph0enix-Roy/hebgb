@@ -18,12 +18,14 @@ def test_display_courses_table(mocker):
             "courseid": "1001",
             "chapterid": "2001",
             "duration": "45",
+            "hour": "1.00 学时",
         },
         {
             "coursename": "Web开发",
             "courseid": "1002",
             "chapterid": "2002",
             "duration": "60",
+            "hour": "1.50 学时",
         },
     ]
 
@@ -51,4 +53,5 @@ def test_display_courses_table(mocker):
         "课程代码",
         "章节代码",
         "课程时长",
+        "学时",
     ]

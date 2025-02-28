@@ -21,10 +21,16 @@ class CourseManager:
         self.console = console
 
     def get_courses(self):
-        """获取用户已报名课程，并返回课程列表
+        """获取用户已报名课程，并返回包含课程信息的字典列表
 
         Returns:
-            list: 已报名课程列表
+            list[dict]: 已报名课程的列表，每个元素是一个包含课程信息的字典。
+                dict: 课程信息字典，包含以下字段：
+                    - `coursename(str)`: 课程标题
+                    - `courseid(str)`: 课程代码
+                    - `chapterid(str)`: 章节代码
+                    - `duration(str)`: 课程时长
+                    - `hour(str)`: 学时
         """
         response = self.session.get(self.COURSE_URL)
         soup = BeautifulSoup(response.text, "html.parser")
@@ -35,17 +41,18 @@ class CourseManager:
         courses = []
         for row in soup.find_all("div", class_="hoz_course_row"):
             course = {
-                "coursename": self._clean_text(row.find("h2").text),
+                "coursename": self._extract_course_name(row),
                 "courseid": self._extract_course_id(row),
                 "chapterid": self._extract_chapter_id(row),
-                "duration": self._get_duration(row),
+                "duration": self._extract_course_duration(row),
+                "hour": self._extract_course_hour(row),
             }
             courses.append(course)
         return courses
 
-    def _clean_text(self, text):
-        """清理课程名称中的多余字符"""
-        return text.strip().replace("\n", "").replace(" ", "")
+    def _extract_course_name(self, row):
+        """提取课程名"""
+        return row.find("h2").text.strip().replace("\n", "").replace(" ", "")
 
     def _extract_course_id(self, row):
         """提取课程ID"""
@@ -63,18 +70,25 @@ class CourseManager:
         match = re.search(r"courseId=(\d+)", div["onclick"])
         return match.group(1) if match else ""
 
-    def _get_duration(self, row):
+    def _extract_course_duration(self, row):
         """提取课程时长"""
         duration_span = row.find("span", title="课程时长")
         if duration_span:
             return duration_span.get_text(strip=True)
-        return "0"
+        return "-"
+
+    def _extract_course_hour(self, row):
+        """提取课程学时"""
+        hour_span = row.find("span", title="学时")
+        if hour_span:
+            return hour_span.get_text(strip=True)
+        return "-"
 
     def display_courses_table(self, courses):
-        """在控制台输出已报名的课程信息
+        """在控制台输出人类友好的已报名的课程信息
 
         Args:
-            courses (list): 课程列表对象
+            `list[dict]`: 课程信息字典列表对象
         """
         table = Table(
             title="已报名的课程信息",
@@ -85,6 +99,7 @@ class CourseManager:
         table.add_column("课程代码", justify="center", style="cyan")
         table.add_column("章节代码", justify="center", style="cyan")
         table.add_column("课程时长", justify="center", style="cyan")
+        table.add_column("学时", justify="center", style="cyan")
         i = 0
         for course in courses:
             i += 1
@@ -94,6 +109,7 @@ class CourseManager:
                 course["courseid"],
                 course["chapterid"],
                 course["duration"],
+                course["hour"],
             )
         self.console.print(table)
 
@@ -104,10 +120,6 @@ class CourseProcessor:
         self.console = console
         self.course_id = course_id
         self.chapter_id = chapter_id
-
-    def start_learning(self):
-        duration = self._get_video_duration()
-        self._simulate_learning(duration)
 
     def _get_video_duration(self):
         # 封装视频时长获取逻辑
@@ -130,12 +142,11 @@ class CourseProcessor:
         soup = BeautifulSoup(html.text, "html.parser")
 
         # ignore errors
-        course_id = (
-            element := soup.find("input", {"type": "hidden", "id": "course_id"})
-        ).get("value", "")
-        is_gkk = (
-            element := soup.find("input", {"type": "hidden", "id": "is_gkk"})
-        ).get("value", "")
+        course_id = soup.find("input", {"type": "hidden", "id": "course_id"}).get(
+            "value", ""
+        )
+
+        is_gkk = soup.find("input", {"type": "hidden", "id": "is_gkk"}).get("value", "")
         payload = {"id": course_id, "is_gkk": is_gkk, "_": int(time.time() * 1000)}
         self.session.headers.update(
             {
@@ -208,3 +219,7 @@ class CourseProcessor:
         for _ in track(range(self._calculate_study_time(duration))):
             self._send_learning_progress()
             time.sleep(1)
+
+    def start_learning(self):
+        duration = self._get_video_duration()
+        self._simulate_learning(duration)

@@ -3,6 +3,7 @@ from courses import CourseManager
 from exceptions import GbException, ErrorCodes
 from console_utils import RichOutput
 import requests
+from datetime import datetime
 
 
 class GbLearningApp:
@@ -16,6 +17,10 @@ class GbLearningApp:
         }
 
     def run(self):
+        self.console.info("# --------------------------------------------------")
+        self.console.info(
+            f"# 程序启动，时间戳：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        )
         try:
             auth = AuthManager(self.session, self.console)
             auth.login()
