@@ -2,9 +2,8 @@
 name: 功能请求
 about: 为本项目提出您的建议
 title: ''
-labels: ''
-assignees: ''
-
+labels: enhancement
+assigness: ph0enix-Roy
 ---
 
 **这个功能请求与某个问题有关吗？请描述。 清楚简洁地描述问题。**
