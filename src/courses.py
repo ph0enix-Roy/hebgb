@@ -284,68 +284,40 @@ class CourseProcessor:
             }
         )
 
-        # TODO: 循环需要改为 while
-        self.console.status(f"Duration:{duration}")
-        times = duration // 480
-        remainder = duration % 480
-        self.console.status(f"Times:{times}, Remainder:{remainder}")
-        for i in range(times):
-            time.sleep(3)
-            # 构建 payload
+        current_location = 0
+        remaining_duration = duration
+
+        while remaining_duration > 0:
+            chunk = min(480, remaining_duration)
+            is_full_chunk = chunk == 480
+
+            time.sleep(3 if is_full_chunk else 2)
+
             serialize_sco = {
                 f"{self.ref}": {
-                    "lesson_location": 480 * i,
-                    "session_time": 30,
+                    "lesson_location": current_location,
+                    "session_time": 30 if is_full_chunk else 2,
                     "last_learn_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 },
                 "last_study_sco": f"{self.ref}",
             }
+
             payload = {
                 "id": course["courseid"],
                 "serializeSco": urllib.parse.quote(json.dumps(serialize_sco)),
-                "duration": 480,
+                "duration": chunk,
                 "study_course": course["chapterid"],
             }
 
-            self.console.status(payload)
-
-            self.console.status(f"headers: {self.session.headers}")
-
-            response = self.session.post(
-                SEEK_URL,
-                data=payload,
-            )
-
-            if response.status_code == 200:
-                # if response.json() == 0:
-                self.console.status(f"Response:{response.json()}")
-            else:
-                self.console.status(response.status_code)
-                raise GbException(ErrorCodes.AJAX_REQUEST_ERROR, "请求学习课程失败")
-
-        if remainder > 0:
-            time.sleep(2)
-            payload = {
-                "id": course["courseid"],
-                "serializeSco": {
-                    f"{self.ref}": {
-                        "lesson_location": duration,
-                        "session_time": 2,
-                        "last_learn_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    },
-                    "last_study_sco": f"{self.ref}",
-                },
-                "duration": f"{remainder}",
-                "study_course": course["chapterid"],
-            }
-
-            self.console.status(payload)
             response = self.session.post(SEEK_URL, data=payload)
 
-            if response.status_code == 200:
-                # if response.json() == 0:
-                self.console.status(response.json())
-
-            else:
+            if response.status_code != 200:
                 self.console.status(response.status_code)
                 raise GbException(ErrorCodes.AJAX_REQUEST_ERROR, "请求学习课程失败")
+
+            # TODO: 学习进度信息需要用户友好的显示方式
+            # TODO: 能否在此处更新进度条？
+            self.console.status(f"Response:{response.json()}")
+
+            remaining_duration -= chunk
+            current_location += chunk
