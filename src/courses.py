@@ -1,13 +1,16 @@
+from datetime import datetime
+import json
 from bs4 import BeautifulSoup
 import re
 import ffmpeg
-import time
-from rich.progress import track
 from rich.table import Table
 from rich import box
+from rich.text import Text
+import random
+import time
+import urllib.parse
 
-from exceptions import GbException
-from console_utils import RichOutput
+from exceptions import GbException, ErrorCodes
 
 
 class CourseManager:
@@ -90,9 +93,11 @@ class CourseManager:
         Args:
             `list[dict]`: 课程信息字典列表对象
         """
+
+        title = Text("已报名的课程信息", style="bold cyan")
         table = Table(
-            title="已报名的课程信息",
-            box=box.MARKDOWN,
+            title=title,
+            box=box.SIMPLE,
         )
         table.add_column("序号", justify="center", style="cyan")
         table.add_column("课程标题", justify="left", style="cyan")
@@ -112,18 +117,19 @@ class CourseManager:
                 course["hour"],
             )
         self.console.print(table)
+        # TODO: 处理用户输入
+        a = input("请输入序号以开始学习：")
 
 
 class CourseProcessor:
-    def __init__(self, session, console, course_id, chapter_id):
+    def __init__(self, session, console, course_list):
         self.session = session
         self.console = console
-        self.course_id = course_id
-        self.chapter_id = chapter_id
+        self.course_list = course_list
 
-    def _get_video_duration(self):
+    def _get_video_duration(self, course_id):
         # 封装视频时长获取逻辑
-        url = f"https://www.hebgb.gov.cn/portal/study_play.do?id={self.course_id}"
+        url = f"https://www.hebgb.gov.cn/portal/study_play.do?id={course_id}"
 
         headers = {
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
@@ -151,13 +157,10 @@ class CourseProcessor:
         self.session.headers.update(
             {
                 "X-Requested-With": "XMLHttpRequest",
-                # accept
                 "Accept": "*/*",
-                # security
                 "Sec-Fetch-Dest": "empty",
                 "Sec-Fetch-Mode": "cors",
                 "Sec-Fetch-Site": "same-origin",
-                # referer
                 "Referer": f"{url}",
             }
         )
@@ -169,11 +172,10 @@ class CourseProcessor:
         if response.status_code == 200:
             res_course_no = response.json().get("course_no", "")
             res_is_gkk = response.json().get("is_gkk", "")
+            self.ref = response.json().get("chapter", [{}])[0].get("identifierref", "")
             # 至此，已经拿到 course_no
-            self.console.print(f"课程 coure_no: {res_course_no}")
         else:
-            # 出错，则报错 15
-            exit(15)
+            raise GbException(ErrorCodes.COURSE_GET_FAILED, "获取课程信息失败")
 
         payload = {
             "path": "sco1",
@@ -214,12 +216,136 @@ class CourseProcessor:
         except ValueError:  # 防止转换失败
             return 0
 
-    def _simulate_learning(self, duration):
-        # 封装学习进度模拟
-        for _ in track(range(self._calculate_study_time(duration))):
-            self._send_learning_progress()
-            time.sleep(1)
+    def _calculate_study_interval(self, course_count):
+        """根据选定的课程数量生成随机的n个时间间隔，并返回每个间隔的时长
+
+        每个时间间隔的时长为随机整数，范围为1-5秒。
+
+        Args:
+            course_count (int): 课程数量
+
+        Returns:
+            interval_times: 每个时间间隔的时长，单位秒
+        """
+        # 计算学习总时长
+        interval_times = []
+        for i in range(course_count):
+            current_interval = random.randint(1, 5)
+            interval_times.append(current_interval)
+        return interval_times
 
     def start_learning(self):
-        duration = self._get_video_duration()
-        self._simulate_learning(duration)
+        if not self.course_list:
+            raise GbException(ErrorCodes.COURSE_GET_FAILED, "未获取到课程信息")
+
+        course_count = len(self.course_list)
+        interval_times = self._calculate_study_interval(course_count)
+
+        with self.console.create_progress() as progress:
+            task = progress.add_task("[cyan]学习进度", total=course_count)
+
+            # 初始状态信息
+            self.console.info(f"开始学习 {course_count} 门课程")
+
+            for i, course in enumerate(self.course_list):
+                # 更新实时状态
+                self.console.info(f"正在学习：{course['coursename']}")
+                self._simulate_learning(course)
+                time.sleep(interval_times[i])
+                progress.update(
+                    task, advance=1, description=f"[cyan]正在学习 {i+1}/{course_count}"
+                )
+
+    def _simulate_learning(self, course):
+        # 封装学习进度模拟逻辑
+        duration = self._get_video_duration(course["courseid"])
+        if duration == 0:
+            raise GbException(ErrorCodes.COURSE_DURATION_ERROR, "课程时长获取失败")
+
+        SEEK_URL = f"https://www.hebgb.gov.cn/portal/seekNew.do"
+
+        self.session.headers.update(
+            {
+                "Accept": "*/*",
+                "Accept-Encoding": "gzip, deflate, br",
+                "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+                "cache-control": "no-cache",
+                "Connection": "keep-alive",
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Host": "www.hebgb.gov.cn",
+                "Origin": "https://www.hebgb.gov.cn",
+                "Pragma": "no-cache",
+                "Referer": f"https://www.hebgb.gov.cn/portal/study_play.do?id={course['courseid']}",
+                "X-Requested-With": "XMLHttpRequest",
+                "sec-ch-ua": 'Not(A:Brand";v="99", "Microsoft Edge";v="133", "Chromium";v="133"',
+                "sec-ch-ua-mobile": "?0",
+                "sec-ch-ua-platform": "Windows",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36 Edg/133.0.0.0",
+            }
+        )
+
+        # TODO: 循环需要改为 while
+        self.console.status(f"Duration:{duration}")
+        times = duration // 480
+        remainder = duration % 480
+        self.console.status(f"Times:{times}, Remainder:{remainder}")
+        for i in range(times):
+            time.sleep(3)
+            # 构建 payload
+            serialize_sco = {
+                f"{self.ref}": {
+                    "lesson_location": 480 * i,
+                    "session_time": 30,
+                    "last_learn_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                },
+                "last_study_sco": f"{self.ref}",
+            }
+            payload = {
+                "id": course["courseid"],
+                "serializeSco": urllib.parse.quote(json.dumps(serialize_sco)),
+                "duration": 480,
+                "study_course": course["chapterid"],
+            }
+
+            self.console.status(payload)
+
+            self.console.status(f"headers: {self.session.headers}")
+
+            response = self.session.post(
+                SEEK_URL,
+                data=payload,
+            )
+
+            if response.status_code == 200:
+                # if response.json() == 0:
+                self.console.status(f"Response:{response.json()}")
+            else:
+                self.console.status(response.status_code)
+                raise GbException(ErrorCodes.AJAX_REQUEST_ERROR, "请求学习课程失败")
+
+        if remainder > 0:
+            time.sleep(2)
+            payload = {
+                "id": course["courseid"],
+                "serializeSco": {
+                    f"{self.ref}": {
+                        "lesson_location": duration,
+                        "session_time": 2,
+                        "last_learn_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    },
+                    "last_study_sco": f"{self.ref}",
+                },
+                "duration": f"{remainder}",
+                "study_course": course["chapterid"],
+            }
+
+            self.console.status(payload)
+            response = self.session.post(SEEK_URL, data=payload)
+
+            if response.status_code == 200:
+                # if response.json() == 0:
+                self.console.status(response.json())
+
+            else:
+                self.console.status(response.status_code)
+                raise GbException(ErrorCodes.AJAX_REQUEST_ERROR, "请求学习课程失败")

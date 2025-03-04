@@ -1,5 +1,5 @@
 from auth import AuthManager
-from courses import CourseManager
+from courses import CourseManager, CourseProcessor
 from exceptions import GbException, ErrorCodes
 from console_utils import RichOutput
 import requests
@@ -18,29 +18,19 @@ class GbLearningApp:
 
     def run(self):
         self.console.info("# --------------------------------------------------")
-        self.console.info(
-            f"# 程序启动，时间戳：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-        )
-        try:
-            auth = AuthManager(self.session, self.console)
-            auth.login()
+        self.console.info(f"# 程序启动")
 
-            course_mgr = CourseManager(self.session, self.console)
-            courses = course_mgr.get_courses()
+        auth = AuthManager(self.session, self.console)
+        auth.login()
 
-            if courses:
-                course_mgr.display_courses_table(courses)
-                # self.process_learning(courses[0])
+        course_mgr = CourseManager(self.session, self.console)
+        courses = course_mgr.get_courses()
 
-        except GbException as e:
-            self.console.error(f"! 错误代码 {e.code}: {e.message}")
-            exit(e.code)
-
-    """def process_learning(self, course):
-        processor = CourseProcessor(
-            session=self.session,
-            console=self.console,
-            course_id=course["courseid"],
-            chapter_id=course["chapterid"],
-        )
-        processor.start_learning()"""
+        if courses:
+            course_mgr.display_courses_table(courses)
+            processor = CourseProcessor(
+                session=self.session,
+                console=self.console,
+                course_list=courses[:2],
+            )
+            processor.start_learning()

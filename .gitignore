@@ -1,8 +1,7 @@
 # User add
 userinfo.json
-To-do.md
 .vscode/
-captcha.jpg
+.private/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

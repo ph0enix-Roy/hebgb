@@ -30,15 +30,15 @@ class AuthManager:
             self.console.info("# 正在加载用户信息...", end="")
             with open("userinfo.json") as f:
                 self.userinfo = json.load(f)[0]
-            self.console.info("成功")
+            self.console.print("成功")
         except FileNotFoundError:
-            self.console.error("! 用户信息文件未找到")
+            self.console.print("! 用户信息文件未找到")
             raise GbException(ErrorCodes.LOGIN_FAILED, "用户信息文件未找到")
         except json.JSONDecodeError:
-            self.console.error("! 用户信息文件格式错误")
+            self.console.print("! 用户信息文件格式错误")
             raise GbException(ErrorCodes.LOGIN_FAILED, "用户信息文件格式错误")
         except Exception as e:
-            self.console.error(f"! 无法加载用户信息: {str(e)}")
+            self.console.print(f"! 无法加载用户信息: {str(e)}")
             raise GbException(ErrorCodes.LOGIN_FAILED, f"无法加载用户信息: {str(e)}")
 
     def _get_captcha(self):
@@ -54,7 +54,7 @@ class AuthManager:
         if response.status_code != 200:
             raise GbException(ErrorCodes.CAPTCHA_FAILED, "验证码获取失败")
 
-        self.console.info("成功")
+        self.console.print("成功")
         image = Image.open(BytesIO(response.content))
         return self._recognize_captcha(image)
 
@@ -72,7 +72,7 @@ class AuthManager:
         threshold_image = self._create_threshold_table(image, 150)
         result = self.ocr.classification(threshold_image)
 
-        self.console.info(f"识别结果：{result}")
+        self.console.print(f"识别结果：{result}")
         return result
 
     def _create_threshold_table(self, image, threshold):
@@ -107,13 +107,15 @@ class AuthManager:
             self.console.error(f"\n! {r_login.text}")
             exit(ErrorCodes.LOGIN_FAILED)
         else:
-            self.console.info("成功")
+            self.console.print("成功")
             millis = int(round(time.time() * 1000))
             r = self.session.get(self.USER_CHECK_URL + str(millis))
             uinfo_dict = r.json()
             self.console.info("-----------------------------------------------")
+            self.console.status(f"欢迎您，{uinfo_dict['realname']} 同志！")
             self.console.status(
-                f"- 欢迎您，{uinfo_dict['realname']} 同志！\n"
-                f"- 您 {uinfo_dict['year']} 年度要求总学时为 {uinfo_dict['yqzxs']} 学时，已完成学时 {uinfo_dict['ywczxs']} 学时,\n"
-                f"- 要求必修总学时为 {uinfo_dict['yqbxxs']} 学时，已完成必修总学时 {uinfo_dict['ywcbxxs']} 学时"
+                f"您 {uinfo_dict['year']} 年度要求总学时为 {uinfo_dict['yqzxs']} 学时，已完成学时 {uinfo_dict['ywczxs']} 学时"
+            )
+            self.console.status(
+                f"要求必修总学时为 {uinfo_dict['yqbxxs']} 学时，已完成必修总学时 {uinfo_dict['ywcbxxs']} 学时"
             )
