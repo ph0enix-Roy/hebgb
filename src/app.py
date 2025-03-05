@@ -23,14 +23,14 @@ class GbLearningApp:
         self.console.info("# --------------------------------------------------")
         self.console.info(f"# 程序启动")
 
+        # 登录
         auth = AuthManager(self.session, self.console)
         auth.login()
 
-        self.console.info("# 正在获取已报名课程信息...")
         course_mgr = CourseManager(self.session, self.console)
 
+        self.console.info("# 正在获取已报名课程信息...")
         courses = course_mgr.get_courses()
-
         if courses:
 
             course_mgr.display_courses_table(courses)
