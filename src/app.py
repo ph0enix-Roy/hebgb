@@ -19,6 +19,7 @@ class GbLearningApp:
         }
 
     def run(self):
+        # TODO: add circle. when study finishes, start it again.
         self.console.info("# --------------------------------------------------")
         self.console.info(f"# 程序启动")
 
