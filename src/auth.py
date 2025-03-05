@@ -1,18 +1,19 @@
-from io import BytesIO
 import json
 import time
+from io import BytesIO
+
 import ddddocr
 from PIL import Image
 
-from exceptions import GbException, ErrorCodes
 from console_utils import RichOutput
+from exceptions import ErrorCodes, GbException
 
 
 class AuthManager:
 
     CAPTCHA_URL = "https://www.hebgb.gov.cn/portal/login_imgcode.do"
     LOGIN_URL = "https://www.hebgb.gov.cn/portal/login_ajax.do"
-    USER_CHECK_URL = "https://www.hebgb.gov.cn/portal/checkIsLogin.do?_="
+    USER_CHECK_URL = "https://www.hebgb.gov.cn/portal/checkIsLogin.do"
 
     def __init__(self, session, console):
         self.session = session
@@ -101,21 +102,23 @@ class AuthManager:
             }
         r_login = self.session.post(self.LOGIN_URL, data=data)
         if "验证码错误" in r_login.text:
-            self.console.error(f"\n! {r_login.text}")
-            exit(ErrorCodes.CAPTCHA_FAILED)
+            self.console.print("")
+            raise GbException(ErrorCodes.CAPTCHA_FAILED, "验证码错误")
         elif "错误" in r_login.text:
-            self.console.error(f"\n! {r_login.text}")
-            exit(ErrorCodes.LOGIN_FAILED)
+            self.console.print("")
+            raise GbException(ErrorCodes.LOGIN_FAILED, "用户名或密码错误")
         else:
             self.console.print("成功")
-            millis = int(round(time.time() * 1000))
-            r = self.session.get(self.USER_CHECK_URL + str(millis))
-            uinfo_dict = r.json()
-            self.console.info("-----------------------------------------------")
-            self.console.status(f"欢迎您，{uinfo_dict['realname']} 同志！")
-            self.console.status(
-                f"您 {uinfo_dict['year']} 年度要求总学时为 {uinfo_dict['yqzxs']} 学时，已完成学时 {uinfo_dict['ywczxs']} 学时"
-            )
-            self.console.status(
-                f"要求必修总学时为 {uinfo_dict['yqbxxs']} 学时，已完成必修总学时 {uinfo_dict['ywcbxxs']} 学时"
-            )
+            self.update_user_info()
+
+    def update_user_info(self):
+        r = self.session.get(self.USER_CHECK_URL, params={"_": int(time.time() * 1000)})
+        uinfo_dict = r.json()
+        self.console.print()
+        self.console.status(f"# 欢迎您，{uinfo_dict['realname']} 同志！")
+        self.console.status(
+            f"# 您 {uinfo_dict['year']} 年度要求总学时为 {uinfo_dict['yqzxs']} 学时，已完成学时 {uinfo_dict['ywczxs']} 学时"
+        )
+        self.console.status(
+            f"# 要求必修总学时为 {uinfo_dict['yqbxxs']} 学时，已完成必修总学时 {uinfo_dict['ywcbxxs']} 学时"
+        )
