@@ -35,7 +35,8 @@ class GbLearningApp:
                 "请输入要学习的课程编号，多个课程编号用逗号隔开，可使用范围表示法，如1-3。全部选择请直接输入all。",
                 end="",
             )
-            selected_courses = course_mgr.select_courses(courses)
+            user_input = input()
+            selected_courses = course_mgr.select_courses(courses, user_input)
 
             if not selected_courses:
                 self.console.warning("未选择任何课程，程序退出。")
