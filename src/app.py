@@ -1,9 +1,11 @@
-from auth import AuthManager
-from courses import CourseManager, CourseProcessor
-from exceptions import GbException, ErrorCodes
-from console_utils import RichOutput
-import requests
 from datetime import datetime
+
+import requests
+
+from auth import AuthManager
+from console_utils import RichOutput
+from courses import CourseManager, CourseProcessor
+from exceptions import ErrorCodes, GbException
 
 
 class GbLearningApp:
@@ -28,9 +30,19 @@ class GbLearningApp:
 
         if courses:
             course_mgr.display_courses_table(courses)
-            processor = CourseProcessor(
-                session=self.session,
-                console=self.console,
-                course_list=courses[:2],
+
+            self.console.info(
+                "请输入要学习的课程编号，多个课程编号用逗号隔开，可使用范围表示法，如1-3。全部选择请直接输入all。",
+                end="",
             )
-            processor.start_learning()
+            selected_courses = course_mgr.select_courses(courses)
+
+            if not selected_courses:
+                self.console.warning("未选择任何课程，程序退出。")
+            else:
+                processor = CourseProcessor(
+                    session=self.session,
+                    console=self.console,
+                    course_list=selected_courses,
+                )
+                processor.start_learning()

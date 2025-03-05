@@ -1,16 +1,17 @@
-from datetime import datetime
 import json
-from bs4 import BeautifulSoup
-import re
-import ffmpeg
-from rich.table import Table
-from rich import box
-from rich.text import Text
 import random
+import re
 import time
 import urllib.parse
+from datetime import datetime
 
-from exceptions import GbException, ErrorCodes
+import ffmpeg
+from bs4 import BeautifulSoup
+from rich import box
+from rich.table import Table
+from rich.text import Text
+
+from exceptions import ErrorCodes, GbException
 
 
 class CourseManager:
@@ -117,8 +118,56 @@ class CourseManager:
                 course["hour"],
             )
         self.console.print(table)
-        # TODO: 处理用户输入
-        a = input("请输入序号以开始学习：")
+
+    def select_courses(self, courses, input_str):
+        """处理用户输入的课程序号并返回对应的课程子集
+
+        Args:
+            courses: 原始课程列表
+            input_str: 用户输入的字符串
+
+        Returns:
+            list[dict]: 用户选择的课程子集
+        """
+
+        def parse_selection(text, max_num):
+            selected = []
+            if text.lower() == "all":
+                return list(range(1, max_num + 1))
+            text = text.replace("，", ",")  # 处理全角逗号
+            for part in text.split(","):
+                part = part.strip()
+                if "-" in part:
+                    try:
+                        start, end = map(int, part.split("-"))
+                    except ValueError:
+                        continue
+                    # 处理降序范围
+                    step = 1 if start <= end else -1
+                    stop = end + 1 if start <= end else end - 1
+                    for num in range(start, stop, step):
+                        if 1 <= num <= max_num and num not in selected:
+                            selected.append(num)
+                elif part:
+                    try:
+                        num = int(part)
+                        if 1 <= num <= max_num and num not in selected:
+                            selected.append(num)
+                    except ValueError:
+                        continue
+            return selected
+
+        if not courses:
+            return []
+
+        input_str = input_str.strip()
+
+        # 如果输入为空，直接返回空列表
+        if not input_str:
+            return []
+
+        selected_nums = parse_selection(input_str, len(courses))
+        return [courses[i - 1] for i in selected_nums if i > 0]  # 加入对下标0的处理
 
 
 class CourseProcessor:
@@ -162,6 +211,7 @@ class CourseProcessor:
                 "Sec-Fetch-Mode": "cors",
                 "Sec-Fetch-Site": "same-origin",
                 "Referer": f"{url}",
+                "Host": "www.hebgb.gov.cn",
             }
         )
         response = self.session.get(
