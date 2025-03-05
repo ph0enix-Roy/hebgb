@@ -26,7 +26,7 @@ class GbLearningApp:
         auth = AuthManager(self.session, self.console)
         auth.login()
 
-        self.console.info("正在获取已报名课程信息...")
+        self.console.info("# 正在获取已报名课程信息...")
         course_mgr = CourseManager(self.session, self.console)
 
         courses = course_mgr.get_courses()
