@@ -36,14 +36,14 @@ class GbLearningApp:
             course_mgr.display_courses_table(courses)
 
             self.console.info(
-                "请输入要学习的课程编号，可使用范围表示法，如 1,2-3。全部选择请直接输入 all: ",
+                "# 请输入要学习的课程编号，如 1,2-3。全部选择请直接输入 all: ",
                 end="",
             )
             user_input = input()
             selected_courses = course_mgr.select_courses(courses, user_input)
 
             if not selected_courses:
-                self.console.warning("未选择任何课程，程序退出。")
+                self.console.warning("# 未选择任何课程，程序退出。")
             else:
                 processor = CourseProcessor(
                     session=self.session,

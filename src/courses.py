@@ -296,7 +296,7 @@ class CourseProcessor:
             master_task = master_progress.add_task("[cyan]学习进度", total=course_count)
 
             # 初始状态信息
-            self.console.info(f"开始学习 {course_count} 门课程")
+            self.console.info(f"# 开始学习 {course_count} 门课程")
 
             for i, course in enumerate(self.course_list):
 
@@ -392,4 +392,4 @@ class CourseProcessor:
             remaining_duration -= chunk
             current_location += chunk
 
-        self.console.info(f"课程 {course['coursename']} 学习完成")
+        self.console.info(f"# 课程 {course['coursename']} 学习完成")
