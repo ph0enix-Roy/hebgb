@@ -117,6 +117,7 @@ class CourseManager:
                 course["duration"],
                 course["hour"],
             )
+        self.console.print("")
         self.console.print(table)
 
     def select_courses(self, courses, input_str):
@@ -291,26 +292,42 @@ class CourseProcessor:
         course_count = len(self.course_list)
         interval_times = self._calculate_study_interval(course_count)
 
-        with self.console.create_progress() as progress:
-            task = progress.add_task("[cyan]学习进度", total=course_count)
+        with self.console.create_progress() as master_progress:
+            master_task = master_progress.add_task("[cyan]学习进度", total=course_count)
 
             # 初始状态信息
             self.console.info(f"开始学习 {course_count} 门课程")
 
             for i, course in enumerate(self.course_list):
-                # 更新实时状态
-                self.console.info(f"正在学习：{course['coursename']}")
-                self._simulate_learning(course)
-                time.sleep(interval_times[i])
-                progress.update(
-                    task, advance=1, description=f"[cyan]正在学习 {i+1}/{course_count}"
-                )
 
-    def _simulate_learning(self, course):
+                duration = self._get_video_duration(course["courseid"])
+                if duration == 0:
+                    raise GbException(
+                        ErrorCodes.COURSE_DURATION_ERROR, "课程时长获取失败"
+                    )
+
+                # 创建子进度条（学习时长）
+                course_desc = f"[yellow]{course['coursename']}[/]"
+                with master_progress:
+                    sub_task = master_progress.add_task(course_desc, total=duration)
+
+                    # 更新实时状态
+                    self._simulate_learning(
+                        course=course,
+                        duration=duration,
+                        progress=master_progress,
+                        task=sub_task,
+                    )
+                    time.sleep(interval_times[i])
+                    # 更新主进度条
+                    master_progress.update(
+                        master_task,
+                        advance=1,
+                        description=f"[cyan]已完成 {i+1}/{course_count}",
+                    )
+
+    def _simulate_learning(self, course, duration, progress, task):
         # 封装学习进度模拟逻辑
-        duration = self._get_video_duration(course["courseid"])
-        if duration == 0:
-            raise GbException(ErrorCodes.COURSE_DURATION_ERROR, "课程时长获取失败")
 
         SEEK_URL = f"https://www.hebgb.gov.cn/portal/seekNew.do"
 
@@ -365,9 +382,14 @@ class CourseProcessor:
                 self.console.status(response.status_code)
                 raise GbException(ErrorCodes.AJAX_REQUEST_ERROR, "请求学习课程失败")
 
-            # TODO: 学习进度信息需要用户友好的显示方式
-            # TODO: 能否在此处更新进度条？
-            self.console.status(f"Response:{response.json()}")
+            # 更新子进度条
+            progress.update(
+                task,
+                advance=chunk,
+                description=f"[yellow]{course['coursename']}[/] ({current_location}/{duration}s)",
+            )
 
             remaining_duration -= chunk
             current_location += chunk
+
+        self.console.info(f"课程 {course['coursename']} 学习完成")

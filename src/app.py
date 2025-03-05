@@ -26,14 +26,17 @@ class GbLearningApp:
         auth = AuthManager(self.session, self.console)
         auth.login()
 
+        self.console.info("# 正在获取已报名课程信息...")
         course_mgr = CourseManager(self.session, self.console)
+
         courses = course_mgr.get_courses()
 
         if courses:
+
             course_mgr.display_courses_table(courses)
 
             self.console.info(
-                "请输入要学习的课程编号，多个课程编号用逗号隔开，可使用范围表示法，如1-3。全部选择请直接输入all。",
+                "请输入要学习的课程编号，可使用范围表示法，如 1,2-3。全部选择请直接输入 all: ",
                 end="",
             )
             user_input = input()
